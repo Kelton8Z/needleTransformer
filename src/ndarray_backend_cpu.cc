@@ -144,6 +144,99 @@ void ScalarAdd(const AlignedArray& a, scalar_t val, AlignedArray* out) {
  */
 
 
+// Template for element-wise operations
+template<typename Op>
+void EwiseOp(const AlignedArray& a, const AlignedArray& b, AlignedArray* out, Op op) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = op(a.ptr[i], b.ptr[i]);
+    }
+}
+
+// Template for scalar operations
+template<typename Op>
+void ScalarOp(const AlignedArray& a, scalar_t val, AlignedArray* out, Op op) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = op(a.ptr[i], val);
+    }
+}
+
+// Element-wise multiplication
+void EwiseMul(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseOp(a, b, out, [](scalar_t x, scalar_t y) { return x * y; });
+}
+
+// Scalar multiplication
+void ScalarMul(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarOp(a, val, out, [](scalar_t x, scalar_t y) { return x * y; });
+}
+
+// Element-wise division
+void EwiseDiv(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseOp(a, b, out, [](scalar_t x, scalar_t y) { return x / y; });
+}
+
+// Scalar division
+void ScalarDiv(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarOp(a, val, out, [](scalar_t x, scalar_t y) { return x / y; });
+}
+
+// Scalar power
+void ScalarPower(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarOp(a, val, out, [](scalar_t x, scalar_t y) { return std::pow(x, y); });
+}
+
+// Element-wise maximum
+void EwiseMaximum(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseOp(a, b, out, [](scalar_t x, scalar_t y) { return std::max(x, y); });
+}
+
+// Scalar maximum
+void ScalarMaximum(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarOp(a, val, out, [](scalar_t x, scalar_t y) { return std::max(x, y); });
+}
+
+// Element-wise equality
+void EwiseEq(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseOp(a, b, out, [](scalar_t x, scalar_t y) { return x == y ? 1.0f : 0.0f; });
+}
+
+// Scalar equality
+void ScalarEq(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarOp(a, val, out, [](scalar_t x, scalar_t y) { return x == y ? 1.0f : 0.0f; });
+}
+
+// Element-wise greater than or equal to
+void EwiseGe(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseOp(a, b, out, [](scalar_t x, scalar_t y) { return x >= y ? 1.0f : 0.0f; });
+}
+
+// Scalar greater than or equal to
+void ScalarGe(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarOp(a, val, out, [](scalar_t x, scalar_t y) { return x >= y ? 1.0f : 0.0f; });
+}
+
+// Element-wise natural logarithm
+void EwiseLog(const AlignedArray& a, AlignedArray* out) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = std::log(a.ptr[i]);
+    }
+}
+
+// Element-wise exponential
+void EwiseExp(const AlignedArray& a, AlignedArray* out) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = std::exp(a.ptr[i]);
+    }
+}
+
+// Element-wise hyperbolic tangent
+void EwiseTanh(const AlignedArray& a, AlignedArray* out) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = std::tanh(a.ptr[i]);
+    }
+}
+
+
 void Matmul(const AlignedArray& a, const AlignedArray& b, AlignedArray* out, uint32_t m, uint32_t n,
             uint32_t p) {
   /**
@@ -160,7 +253,24 @@ void Matmul(const AlignedArray& a, const AlignedArray& b, AlignedArray* out, uin
    */
 
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  // Initialize output matrix to zeros
+    for (uint32_t i = 0; i < m * p; i++) {
+        out->ptr[i] = 0;
+    }
+
+    // Perform matrix multiplication using three nested loops
+    for (uint32_t i = 0; i < m; i++) {         // Iterate over rows of a
+        for (uint32_t j = 0; j < p; j++) {     // Iterate over columns of b
+            for (uint32_t k = 0; k < n; k++) { // Iterate over columns of a / rows of b
+                // Computing the dot product of row i of a and column j of b
+                // For compact storage:
+                // a[i][k] = a[i * n + k]
+                // b[k][j] = b[k * p + j]
+                // out[i][j] = out[i * p + j]
+                out->ptr[i * p + j] += a.ptr[i * n + k] * b.ptr[k * p + j];
+            }
+        }
+    }
   /// END SOLUTION
 }
 
