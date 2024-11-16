@@ -108,7 +108,18 @@ class MultiHeadAttention(Module):
         probs = None
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # q_features, num_head, dim_head
+        q_head = AttentionLayer(q_dim, num_head, q_dim//num_head)
+        k_head = AttentionLayer(k_dim, num_head, k_dim//num_head)
+        v_head = AttentionLayer(v_dim, num_head, v_dim//num_head)
+        heads = [q_head, k_head, v_head]
+        concat = []
+        for embedding, head in zip([q, k, v], heads):
+            x = head(embedding)
+            concat.append(x)
+
+        result = np.concatenate(concat, dim=2)
+        probs = self.dropout(result)
         ### END YOUR SOLUTION
 
         return result, probs
@@ -195,14 +206,46 @@ class AttentionLayer(Module):
         if v is None:
             v = q
 
-        batch_size, queries_len, q_dim = q.shape
-        _, keys_values_len, k_dim = k.shape
-        _, _, v_dim = v.shape
-
         result = None
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        k = self.k_projection(k)
+        q = self.q_projection(q)
+        v = self.v_projection(v)
+        scores = q @ np.transpose(k, (0, 1)) # @ is the same as torch.matmul()
+        context_length, attention_dim = k.shape[0], k.shape[1]
+        scores = scores / (attention_dim ** 0.5)
+
+        # lower_triangular = np.tril(np.ones((context_length, context_length)))
+        # mask = lower_triangular == 0
+        # scores = scores.masked_fill(mask, float('-inf'))
+        mask = MultiHeadAttention.create_causal_mask(self, i=context_length, j=context_length, device=self.device)
+        mask = mask.reshape(scores.shape)
+        print(f'mask {mask}')
+        # scores = Tensor(np.where(mask, float('-inf'), scores))
+        # scores = scores.numpy()
+        # scores[mask.numpy()] = float('-inf')
+        # scores = Tensor(scores)
+        
+        # r, c = scores.shape
+        # for i in range(r):
+        #     for j in range(c):
+        #         if mask[i][j] == 1:
+        #             scores[i][j] = float('-inf')
+        
+        
+        scores = ndarray.NDArray(scores.realize_cached_data(), device=self.device)
+        print(type(scores))
+        print(type(mask))
+        scores *= mask
+        print(scores)
+                
+        # scores = MultiHeadAttention.softmax(self, scores)
+        import torch.nn as nn
+        import torch
+        print(f'SHAPE {scores.shape}')
+        scores = nn.functional.softmax(torch.Tensor(scores.numpy()), dim = 2)
+        result = scores @ v
         ### END YOUR SOLUTION
 
         return result
