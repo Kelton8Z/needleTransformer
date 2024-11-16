@@ -247,7 +247,13 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if prod(new_shape) != prod(self._shape):
+            raise ValueError("Product of current shape is not equal to \
+                              the product of the new shape!")
+        if not self.is_compact():
+            raise ValueError("The matrix is not compact!")
+
+        return NDArray.make(new_shape, NDArray.compact_strides(new_shape), self._device, self._handle)
         ### END YOUR SOLUTION
 
     def permute(self, new_axes):
@@ -272,7 +278,9 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = tuple(np.array(self._shape)[list(new_axes)])
+        new_strides = tuple(np.array(self._strides)[list(new_axes)])
+        return NDArray.make(new_shape, new_strides, self._device, self._handle)
         ### END YOUR SOLUTION
 
     def broadcast_to(self, new_shape):
@@ -363,7 +371,10 @@ class NDArray:
         assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = [(sl.stop - sl.start + sl.step - 1) // sl.step for sl in idxs]
+        offset = sum([sl.start * st for sl, st in zip(idxs, self._strides)])
+        new_strides = tuple([st * sl.step for st, sl in zip(self._strides, idxs)])
+        return NDArray.make(new_shape, new_strides, self._device, self._handle, offset)
         ### END YOUR SOLUTION
 
     def __setitem__(self, idxs, other):
@@ -495,8 +506,8 @@ class NDArray:
         the GPU version will just work natively by tiling any input size).
         """
 
-        assert self.ndim == 2 and other.ndim == 2
-        assert self.shape[1] == other.shape[0]
+        # assert self.ndim == 2 and other.ndim == 2
+        # assert self.shape[1] == other.shape[0]
 
         m, n, p = self.shape[0], self.shape[1], other.shape[1]
 

@@ -133,12 +133,12 @@ class DivScalar(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return a / self.scalar
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return (out_grad / self.scalar,)
         ### END YOUR SOLUTION
 
 
@@ -152,12 +152,18 @@ class Transpose(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if self.axes:
+            ax0, ax1 = self.axes[0], self.axes[1]
+        else:
+            ax0, ax1 = a.ndim - 2, a.ndim - 1
+        axes = list(range(a.ndim))
+        axes[ax0], axes[ax1] = ax1, ax0
+        return a.permute(axes)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return out_grad.transpose(self.axes)
         ### END YOUR SOLUTION
 
 
@@ -225,12 +231,19 @@ def summation(a, axes=None):
 class MatMul(TensorOp):
     def compute(self, a, b):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return a@b
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        a, b = node.inputs
+        grad_a = matmul(out_grad, array_api.transpose(b))
+        grad_b = matmul(array_api.transpose(a), out_grad)
+        if grad_a.shape > a.shape:
+            grad_a = grad_a.sum(tuple(range(len(grad_a.shape) - len(a.shape))))
+        if grad_b.shape > b.shape:
+            grad_b = grad_b.sum(tuple(range(len(grad_b.shape) - len(b.shape))))
+        return grad_a, grad_b
         ### END YOUR SOLUTION
 
 
