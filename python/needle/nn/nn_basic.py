@@ -142,7 +142,7 @@ class SoftmaxLoss(Module):
     def forward(self, logits: Tensor, y: Tensor):
         ### BEGIN YOUR SOLUTION
         num_of_row, num_of_class = logits.shape
-        one_hot_y = init.one_hot(num_of_class, y)
+        one_hot_y = init.one_hot(num_of_class, y, device=logits.device, dtype=logits.dtype)
         axis = (1,)
         actual_logit_sum = ops.summation(ops.logsumexp(logits, axis) / num_of_row)
         true_logit_sum = ops.summation(one_hot_y * logits / num_of_row)
@@ -230,7 +230,7 @@ class Dropout(Module):
         ### BEGIN YOUR SOLUTION
         if self.training:
             multiplier_prob = 1-self.p
-            mask = init.randb(*x.shape, p=multiplier_prob)
+            mask = init.randb(*x.shape, p=multiplier_prob, device=x.device, dtype='float32')
             return x * mask / multiplier_prob
         else:
             return x
