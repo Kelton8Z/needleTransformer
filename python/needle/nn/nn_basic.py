@@ -103,9 +103,7 @@ class Linear(Module):
                 self.bias = Parameter(np.unique(self.bias))
             #     bias_shape = (1,) * (len(output.shape) - 1) + (self.out_features,)
             #     self.bias = Tensor(self.bias.data.numpy()[0], requires_grad=True)
-            # need to be broadcastable beyond 2D
-            print(f'broadcasting from {self.bias.shape} to {output.shape}')
-            
+            # need to be broadcastable beyond 2D            
             output += self.bias.broadcast_to(output.shape)
         return output
         ### END YOUR SOLUTION
@@ -211,13 +209,14 @@ class LayerNorm1d(Module):
 
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        num_batches, num_features = x.shape
+        num_batches, _ = x.shape
+        target_shape = (num_batches, self.dim)
         feature_axis = (1,)
-        mean = (x.sum(feature_axis) / num_features).reshape((num_batches, 1)).broadcast_to(x.shape)
-        var = (((x - mean)**2).sum(feature_axis) / num_features).reshape((num_batches, 1)).broadcast_to(x.shape)
-        std = (var + self.eps)**0.5
+        mean = (x.sum(feature_axis) / self.dim).reshape((num_batches, 1)).broadcast_to(target_shape)
+        var = ((x - mean)**2).sum(feature_axis) / self.dim
+        std = ((var + self.eps)**0.5).reshape((num_batches, 1)).broadcast_to(target_shape)
         z_score = (x-mean) / std
-        return self.w * z_score + self.b
+        return self.w.broadcast_to(target_shape) * z_score + self.b.broadcast_to(target_shape)
         ### END YOUR SOLUTION
 
 
