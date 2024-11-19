@@ -105,35 +105,60 @@ class MultiHeadAttention(Module):
 
         result = None
         probs = None
+        
+        qk = self.matmul(q, k) / (q_dim**0.5) 
 
-        scale = (k_dim ** -0.5)
-        attention_scores = self.matmul(q, k) * scale
+        if self.causal:
+            mask = self.create_causal_mask(queries_len, keys_values_len, device=q.device) 
+            mask = mask.broadcast_to((batch_size, num_head, queries_len, keys_values_len)) 
+            qk += mask # (bs, head, q_len, k_len)
         
-        # Apply softmax to get attention probabilities
-        attention_probs = self.softmax(attention_scores)
+        probs = self.dropout(self.softmax(qk)) 
+        result = self.matmul(probs, ops.transpose(v)) 
+        return result, probs
         
-        # Apply dropout if specified
-        if self.dropout:
-            attention_probs = self.dropout(attention_probs)
+        # lower_triangular = np.tril(np.ones((context_length, context_length)))
+        # mask = lower_triangular == 0
+        # scores = scores.masked_fill(mask, float('-inf'))
+        scores = self.matmul(q, k)
+        scores = scores / (k_dim ** 0.5)
+        # scores = Tensor(scores.realize_cached_data(), device=self.device)
         
-        # Compute final output
-        result = ops.matmul(attention_probs, v)
+        if self.causal:
+            mask = self.create_causal_mask(i=queries_len, j=keys_values_len, device=self.device)
+            mask = mask.broadcast_to((batch_size, num_head, queries_len, keys_values_len)) 
+            # mask.reshape(scores.shape)
+            mask = Tensor(mask, device=self.device)
+            scores += mask
+        # scores = Tensor(np.where(mask, float('-inf'), scores))
+        # scores = scores.numpy()
+        # scores[mask.numpy()] = float('-inf')
+        # scores = Tensor(scores)
         
-        return result, attention_probs
+        # r, c = scores.shape
+        # for i in range(r):
+        #     for j in range(c):
+        #         if mask[i][j] == 1:
+        #             scores[i][j] = float('-inf')
+        
+        # v = Tensor(v.numpy(), device=self.device)
+        scores = self.softmax(scores)
+        probs = self.dropout(scores)
+        result = self.matmul(probs, ops.transpose(v))
         ### BEGIN YOUR SOLUTION
         # q_features, num_head, dim_head
-        q_head = AttentionLayer(q_dim, num_head, q_dim//num_head)
-        k_head = AttentionLayer(k_dim, num_head, k_dim//num_head)
-        v_head = AttentionLayer(v_dim, num_head, v_dim//num_head)
-        heads = [q_head, k_head, v_head]
-        concat = []
-        for embedding, head in zip([q, k, v], heads):
-            x = head(embedding)
-            concat.append(x)
+        # q_head = AttentionLayer(q_dim, num_head, q_dim//num_head)
+        # k_head = AttentionLayer(k_dim, num_head, k_dim//num_head)
+        # v_head = AttentionLayer(v_dim, num_head, v_dim//num_head)
+        # heads = [q_head, k_head, v_head]
+        # concat = []
+        # for embedding, head in zip([q, k, v], heads):
+        #     x = head(embedding)
+        #     concat.append(x)
 
-        result = Tensor(ops.ops_mathematic.stack(tuple(concat), 2), device=q.device, dtype=q.dtype)
-        print(result.shape)
-        probs = self.dropout(self.softmax(result))
+        # result = Tensor(ops.ops_mathematic.stack(tuple(concat), 2), device=q.device, dtype=q.dtype)
+        # print(result.shape)
+        
         ### END YOUR SOLUTION
 
         return result, probs
@@ -223,39 +248,30 @@ class AttentionLayer(Module):
         result = None
 
         ### BEGIN YOUR SOLUTION
-        k = self.k_projection(k)
-        q = self.q_projection(q)
-        v = self.v_projection(v)
-        scores = q @ np.transpose(k, (0, 1)) # @ is the same as torch.matmul()
-        context_length, attention_dim = k.shape[0], k.shape[1]
-        scores = scores / (attention_dim ** 0.5)
+        batch_size, q_len, q_dim = q.shape
+        batch_size, k_len, k_dim = k.shape
+        _, _, v_dim = v.shape
+        q_norm = self.prenorm_q(q.reshape((batch_size * q_len, q_dim)))
+        k_norm = self.prenorm_k(k.reshape((batch_size * k_len, q_dim)))
+        v_norm = self.prenorm_v(v.reshape((batch_size * k_len, v_dim)))
 
-        # lower_triangular = np.tril(np.ones((context_length, context_length)))
-        # mask = lower_triangular == 0
-        # scores = scores.masked_fill(mask, float('-inf'))
-        mask = MultiHeadAttention.create_causal_mask(self, i=context_length, j=context_length, device=self.device)
-        mask = Tensor(mask.reshape(scores.shape), device=self.device)
-        # scores = Tensor(np.where(mask, float('-inf'), scores))
-        # scores = scores.numpy()
-        # scores[mask.numpy()] = float('-inf')
-        # scores = Tensor(scores)
+        q = self.q_projection(q_norm) 
+        k = self.k_projection(k_norm) 
+        v = self.v_projection(v_norm)
         
-        # r, c = scores.shape
-        # for i in range(r):
-        #     for j in range(c):
-        #         if mask[i][j] == 1:
-        #             scores[i][j] = float('-inf')
-        
-        
-        scores = Tensor(scores.realize_cached_data(), device=self.device)
-        
-        scores += mask
-        print(type(scores))
-        v = Tensor(v.numpy(), device=self.device)
-        print(type(v))
-        result = scores @ v
+        q = q.reshape((batch_size, q_len, self.num_head, self.dim_head))
+        k = k.reshape((batch_size, k_len, self.num_head, self.dim_head))
+        v = v.reshape((batch_size, k_len, self.num_head, self.dim_head))
+
+        q = q.transpose(axes=(1, 2)) 
+        k = k.transpose(axes=(1, 2)) 
+        v = v.transpose(axes=(1, 2))
+
+        out, probs = self.attn(q, k, v) 
+        out = out.transpose(axes=(1, 2)).reshape((batch_size * q_len, self.num_head * self.dim_head)) 
+        result = self.out_projection(out).reshape((batch_size, q_len, self.out_features))
         ### END YOUR SOLUTION
-
+         
         return result
 
 
@@ -280,7 +296,20 @@ class TransformerLayer(Module):
         self.dtype = dtype
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.attn_layer = AttentionLayer(
+            q_features=q_features,
+            num_head=num_head,
+            dim_head=dim_head,
+            dropout=dropout,
+            causal=causal,
+            device=device,
+            dtype=dtype,
+        )
+        self.norm = LayerNorm1d(q_features, device=device, dtype=dtype)
+        self.linear1 = Linear(q_features, hidden_size, device=device, dtype=dtype)
+        self.linear2 = Linear(hidden_size, q_features, device=device, dtype=dtype)
+        self.dropout = Dropout(dropout)
+        self.relu = ReLU()
         ### END YOUR SOLUTION
 
     def forward(
@@ -296,7 +325,13 @@ class TransformerLayer(Module):
         batch_size, seq_len, x_dim = x.shape
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        x = x + self.dropout(self.attn_layer(x))
+
+        y = self.norm(x.reshape((batch_size * seq_len, x_dim)))
+        y = self.dropout(self.relu(self.linear1(y)))
+        y = self.dropout(self.linear2(y))
+
+        x = x + y.reshape((batch_size, seq_len, x_dim))
         ### END YOUR SOLUTION
 
         return x
@@ -327,7 +362,19 @@ class Transformer(Module):
         self.batch_first = batch_first
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.pos_embed = Embedding(sequence_len, embedding_size, device=device, dtype=dtype)
+        self.transformer_layers = Sequential(*[
+            TransformerLayer(
+                embedding_size,
+                num_head=num_head,
+                dim_head=dim_head,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                causal=causal,
+                device=device,
+                dtype=dtype,
+            ) for _ in range(num_layers)
+        ])
         ### END YOUR SOLUTION
 
     def forward(
@@ -339,7 +386,13 @@ class Transformer(Module):
             x = ops.transpose(x, axes=(0, 1))
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        batch_size, seq_len, _ = x.shape
+        ts = self.create_timestamp_tensor(batch_size, seq_len) 
+        pos_embedding = self.pos_embed(ts) 
+        pos_embedding = ops.transpose(pos_embedding, axes=(0, 1)) 
+
+        x = x + pos_embedding 
+        x = self.transformer_layers(x)
         ### END YOUR SOLUTION
 
         if not self.batch_first:

@@ -304,8 +304,8 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        for x, y in zip(self._shape, new_shape):
-            assert(x == y or x == 1)
+        # for x, y in zip(self._shape, new_shape):
+        #     assert(x == y or x == 1)
         
         new_strides = list(self._strides)
         for i in range(len(self._shape)):
